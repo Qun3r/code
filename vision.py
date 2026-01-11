@@ -14,15 +14,15 @@ import serial
 GUI_ENABLED = True
 
 # 2. Czy wypisywać komendy w terminalu/konsoli?
-TERMINAL_OUTPUT = False
+TERMINAL_OUTPUT = True
 
 # 3. Czy wysyłać sygnały do Nexteer przez UART?
-UART_ENABLED = False
+UART_ENABLED = True
 
 # ================= 2. KONFIGURACJA SPRZĘTOWA =================
 
 # Parametry komunikacji UART
-SERIAL_PORT = '/dev/ttyS0'
+SERIAL_PORT = '/dev/serial0'
 BAUD_RATE = 9600
 
 # Parametry wizyjne i fizyczne
@@ -146,11 +146,12 @@ def get_steering_command(x_pos):
 # ================= 5. PĘTLA GŁÓWNA =================
 
 if TERMINAL_OUTPUT: print("Initializing cameras...")
-capL = cv2.VideoCapture(0)
-capR = cv2.VideoCapture(2)
-capL.set(3, FRAME_WIDTH); capL.set(4, FRAME_HEIGHT)
-capR.set(3, FRAME_WIDTH); capR.set(4, FRAME_HEIGHT)
 
+
+capL = cv2.VideoCapture(2)
+capR = cv2.VideoCapture(0)
+capL.set(3,FRAME_WIDTH); capL.set(4,FRAME_HEIGHT)
+capR.set(3,FRAME_WIDTH); capR.set(4,FRAME_HEIGHT)
 if TERMINAL_OUTPUT: print("SYSTEM STARTED. Main loop running...")
 
 while True:
