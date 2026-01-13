@@ -6,16 +6,6 @@ import time
 from ultralytics import YOLO
 import serial
 
-# ================= 1. KONFIGURACJA TRYBU PRACY =================
-
-GUI_ENABLED = True
-TERMINAL_OUTPUT = Trueimport cv2
-import numpy as np
-import sys
-import os
-import time
-from ultralytics import YOLO
-import serial
 
 # ================= 1. KONFIGURACJA TRYBU PRACY =================
 
