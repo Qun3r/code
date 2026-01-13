@@ -1,11 +1,9 @@
 import cv2
 
-# POPRAWKA: Kamery zamienione zgodnie z fizycznym montażem
-# capL (index 0) = LEWA kamera (patrząc od tyłu robota)
-# capR (index 2) = PRAWA kamera (patrząc od tyłu robota)
 
-capL = cv2.VideoCapture(0)  # LEWA
-capR = cv2.VideoCapture(2)  # PRAWA
+
+capL = cv2.VideoCapture(0)  
+capR = cv2.VideoCapture(2)  
 
 capL.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 capL.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
