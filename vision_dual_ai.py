@@ -18,7 +18,7 @@ SERIAL_PORT = '/dev/serial0'
 BAUD_RATE = 9600
 
 # Parametry wizyjne i fizyczne
-BASELINE = 9.5        # Odległość między kamerami [cm]
+BASELINE = 9.5        # Odległość między kamerami [cqm]
 FOCAL_LENGTH = 500    # [px]
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
