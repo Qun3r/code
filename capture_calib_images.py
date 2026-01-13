@@ -12,7 +12,7 @@ H = CFG.get("frame_h", 480)
 OUT_DIR = "calib_images"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-CHESSBOARD_SIZE = (9, 6)    # <-- DOPASUJ do swojej szachownicy (wewn. narożniki)
+CHESSBOARD_SIZE = (8, 5)    # <-- DOPASUJ do swojej szachownicy (wewn. narożniki)
 SHOW_CORNERS = True
 
 capL = cv2.VideoCapture(L_IDX)

@@ -8,8 +8,8 @@ CFG = json.load(open("camera_config.json", "r", encoding="utf-8"))
 W = CFG.get("frame_w", 640)
 H = CFG.get("frame_h", 480)
 
-CHESSBOARD_SIZE = (9, 6)     # <-- DOPASUJ (wewn. narożniki)
-SQUARE_SIZE_CM = 2.5         # <-- DOPASUJ (w cm)
+CHESSBOARD_SIZE = (8, 5)     # <-- DOPASUJ (wewn. narożniki)
+SQUARE_SIZE_CM = 3         # <-- DOPASUJ (w cm)
 BASELINE_CM = 9.5            # u Ciebie
 
 IMG_DIR = "calib_images"
