@@ -10,15 +10,15 @@ import serial
 # =========================
 # FAST / DEBUG ustawienia
 # =========================
-GUI_ENABLED = True
-TERMINAL_OUTPUT = False
-UART_ENABLED = False
+GUI_ENABLED = False
+TERMINAL_OUTPUT = True
+UART_ENABLED = True
 
 # Największy zysk FPS:
-RECTIFY_ENABLED = False   # False = szybki podgląd/sterowanie, True = poprawna Z z dysparycji (cięższe)
+RECTIFY_ENABLED = True   # False = szybki podgląd/sterowanie, True = poprawna Z z dysparycji (cięższe)
 
 YOLO_EVERY_N = 5          # YOLO odpalaj co N klatek (np. 4-8)
-YOLO_IMGSZ = 256          # mniejsze = szybciej (224/256/320)
+YOLO_IMGSZ = 320          # mniejsze = szybciej (224/256/320)
 YOLO_CONF = 0.5
 
 SERIAL_PORT = "/dev/serial0"
@@ -36,9 +36,9 @@ UPPER_HSV = np.array([64, 255, 255])
 STOP_DIST_CM = 25.0
 
 # Sterowanie (Twoje, przesunięte w prawo)
-FORWARD_LEFT_CM  = 10
-FORWARD_RIGHT_CM = 3
-SHARP_LEFT_CM    = 18
+FORWARD_LEFT_CM  = 12
+FORWARD_RIGHT_CM = 0
+SHARP_LEFT_CM    = 20
 SHARP_RIGHT_CM   = 14
 
 # HSV “tracking” w ROI
