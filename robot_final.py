@@ -7,15 +7,14 @@ import json
 from ultralytics import YOLO
 import serial
 
-
 GUI_ENABLED = True
-TERMINAL_OUTPUT = True
+TERMINAL_OUTPUT = False
 UART_ENABLED = False
 
 SERIAL_PORT = "/dev/serial0"
 BAUD_RATE = 9600
 
-BASELINE_CM = 9.5
+BASELINE_CM = 9.516
 MODEL_PATH = "model_ai.onnx"
 
 FRAME_W = 640
@@ -24,10 +23,19 @@ FRAME_H = 480
 LOWER_HSV = np.array([29, 86, 6])
 UPPER_HSV = np.array([64, 255, 255])
 
-CENTER_MARGIN_CM = 3.0
-SHARP_TURN_CM = 8.0
 STOP_DIST_CM = 25.0
 
+# --- Progi sterowania (cm) ---
+# strefa FORWARD przesunięta w prawo i szersza:
+FORWARD_LEFT_CM  = 10   # ile cm w lewo nadal FORWARD
+FORWARD_RIGHT_CM = 3    # ile cm w prawo nadal FORWARD
+
+SHARP_LEFT_CM  = 18
+SHARP_RIGHT_CM = 14
+
+# --- Reacquisition (gdy zgubi piłkę) ---
+# ile kolejnych iteracji wysyłać X/Y zanim STOP
+REACQ_MAX_MISSES = 20  # ~ 20 iteracji (dobierz do FPS)
 
 def load_camera_config(path="camera_config.json"):
     if not os.path.isfile(path):
@@ -74,12 +82,23 @@ def process_output(cmd_text, distance_cm, ser=None):
 
     if UART_ENABLED and ser is not None:
         code = b"S"
-        if cmd_text == "FORWARD": code = b"F"
-        elif cmd_text == "LEFT": code = b"L"
-        elif cmd_text == "SHARP LEFT": code = b"l"
-        elif cmd_text == "RIGHT": code = b"R"
-        elif cmd_text == "SHARP RIGHT": code = b"r"
-        elif "STOP" in cmd_text: code = b"S"
+        if cmd_text == "FORWARD":
+            code = b"F"
+        elif cmd_text == "LEFT":
+            code = b"L"
+        elif cmd_text == "SHARP LEFT":
+            code = b"l"
+        elif cmd_text == "RIGHT":
+            code = b"R"
+        elif cmd_text == "SHARP RIGHT":
+            code = b"r"
+        elif cmd_text == "RECOVERY LEFT":
+            code = b"X"
+        elif cmd_text == "RECOVERY RIGHT":
+            code = b"Y"
+        elif "STOP" in cmd_text:
+            code = b"S"
+
         try:
             ser.write(code + b"\n")
         except Exception as e:
@@ -108,6 +127,8 @@ def detect_hsv_smart_right(frame, bbox_left, frame_w, frame_h):
     lx1, ly1, lx2, ly2 = bbox_left
     y_start = max(0, ly1 - 40)
     y_end = min(frame_h, ly2 + 40)
+
+    # wracamy do Twojego "głównego" podejścia: ROI od lewej krawędzi do lx2+20
     x_start = 0
     x_end = min(frame_w, lx2 + 20)
 
@@ -138,26 +159,28 @@ def compute_X_center_cm(cx_L, cx_R, fx, cx0, baseline_cm):
         return None, None, None
 
     Z = (fx * baseline_cm) / abs(disp)
-
-    # X w układzie LEWEJ kamery (0 na osi optycznej lewej)
     X_left = ((float(cx_L) - cx0) * Z) / fx
-
-    # środek baseline jest o +baseline/2 na prawo od lewej kamery
     X_center = X_left - (baseline_cm / 2.0)
 
     return X_center, Z, disp
 
 
 def get_steering_command_from_X(X_center_cm):
-    if abs(X_center_cm) < CENTER_MARGIN_CM:
+    # FORWARD w przedziale [-FORWARD_LEFT_CM, +FORWARD_RIGHT_CM]
+    if -FORWARD_LEFT_CM <= X_center_cm <= FORWARD_RIGHT_CM:
         return "FORWARD"
-    if X_center_cm < -SHARP_TURN_CM:
+
+    if X_center_cm < -SHARP_LEFT_CM:
         return "SHARP LEFT"
-    if X_center_cm < 0:
+    if X_center_cm < -FORWARD_LEFT_CM:
         return "LEFT"
-    if X_center_cm > SHARP_TURN_CM:
+
+    if X_center_cm > SHARP_RIGHT_CM:
         return "SHARP RIGHT"
-    return "RIGHT"
+    if X_center_cm > FORWARD_RIGHT_CM:
+        return "RIGHT"
+
+    return "FORWARD"
 
 
 def main():
@@ -184,6 +207,8 @@ def main():
         print(f"Frame: {FRAME_W}x{FRAME_H}")
         print(f"fx={fx:.2f}px, cx={cx0:.2f}px (from stereoMap.xml)")
         print(f"BASELINE={BASELINE_CM} cm | baseline/2={BASELINE_CM/2:.2f} cm")
+        print(f"FORWARD zone: [{-FORWARD_LEFT_CM}, +{FORWARD_RIGHT_CM}] cm")
+        print(f"SHARP L/R: {SHARP_LEFT_CM}/{SHARP_RIGHT_CM} cm")
         print("=" * 60)
 
     ser = None
@@ -223,6 +248,10 @@ def main():
     if TERMINAL_OUTPUT:
         print("SYSTEM STARTED - press 'q' to quit")
 
+    # --- pamięć strony i licznik utraty ---
+    last_side = 0     # -1 lewo, +1 prawo, 0 nieznane
+    miss_cnt = 0      # ile iteracji bez pełnej detekcji
+
     while True:
         t0 = time.time()
 
@@ -244,6 +273,7 @@ def main():
         cx_L = None
         cx_R = None
 
+        detR = None
         if detL is not None:
             cx_L, cy_L = detL
             detR = detect_hsv_smart_right(rectR, bboxL, FRAME_W, FRAME_H)
@@ -254,67 +284,46 @@ def main():
                 if Z is not None:
                     dist_cm = float(Z)
 
+                # aktualizacja strony (tylko gdy mamy sensowne X)
                 if X_center is not None:
+                    if X_center < 0:
+                        last_side = -1
+                    elif X_center > 0:
+                        last_side = +1
+
                     cmd = get_steering_command_from_X(X_center)
 
+                # warunek zatrzymania
                 if dist_cm > 0 and dist_cm < STOP_DIST_CM:
                     cmd = "STOP - OBSTACLE"
-            else:
-                cmd = "SEARCHING"
+        # --- logika reacquisition ---
+        full_ok = (detL is not None) and (detR is not None) and (X_center is not None)
 
-            if TERMINAL_OUTPUT and cx_R is not None and X_center is not None:
-                print(f"DBG cxL={cx_L} cxR={cx_R} disp={disp:.1f}  Xc={X_center:.2f}cm  Z={dist_cm:.1f}cm")
-
+        if full_ok:
+            miss_cnt = 0
             process_output(cmd, dist_cm, ser)
         else:
-            process_output("SEARCHING", 0.0, ser)
+            miss_cnt += 1
+
+            # przez kilka iteracji próbuj odzyskać obiekt zamiast natychmiast STOP
+            if miss_cnt <= REACQ_MAX_MISSES:
+                if last_side < 0:
+                    process_output("RECOVERY LEFT", 0.0, ser)
+                elif last_side > 0:
+                    process_output("RECOVERY RIGHT", 0.0, ser)
+                else:
+                    process_output("STOP", 0.0, ser)
+            else:
+                process_output("STOP", 0.0, ser)
+
+        if TERMINAL_OUTPUT and cx_R is not None and X_center is not None:
+            print(f"DBG cxL={cx_L} cxR={cx_R} disp={disp:.1f}  Xc={X_center:.2f}cm  Z={dist_cm:.1f}cm miss={miss_cnt}")
 
         if GUI_ENABLED:
-            fps = 1.0 / max(1e-6, (time.time() - t0))
+            # jeśli kiedyś włączysz GUI, możesz tu dodać wizualizację
+            _ = (time.time() - t0)
 
-            # strefy w cm (wizualizacja tylko orientacyjna) -> rysujemy linie w pikselach wokół osi cx0
-            # Wyznacz szerokość marginesu w px przy założeniu dystansu ~100cm (tylko do podglądu)
-            approx_Z = 100.0
-            px_per_cm = fx / approx_Z
-            center_px = int(cx0)
-            margin_px = int(CENTER_MARGIN_CM * px_per_cm)
-            sharp_px = int(SHARP_TURN_CM * px_per_cm)
-
-            cv2.line(rectL, (center_px, 0), (center_px, FRAME_H), (255, 0, 255), 1)
-            cv2.line(rectL, (center_px - margin_px, 0), (center_px - margin_px, FRAME_H), (0, 0, 255), 1)
-            cv2.line(rectL, (center_px + margin_px, 0), (center_px + margin_px, FRAME_H), (0, 0, 255), 1)
-            cv2.line(rectL, (center_px - sharp_px, 0), (center_px - sharp_px, FRAME_H), (0, 0, 255), 2)
-            cv2.line(rectL, (center_px + sharp_px, 0), (center_px + sharp_px, FRAME_H), (0, 0, 255), 2)
-
-            cv2.putText(rectL, f"LEFT idx={left_idx} (AI)", (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
-            cv2.putText(rectR, f"RIGHT idx={right_idx} (HSV)", (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
-
-            cv2.putText(rectL, f"FPS:{fps:.1f} fx:{fx:.0f}px cx:{cx0:.0f}px",
-                        (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
-
-            if detL is not None and bboxL is not None:
-                x1, y1, x2, y2 = bboxL
-                cv2.rectangle(rectL, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(rectL, cmd, (x1, max(20, y1 - 10)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-            if cx_L is not None:
-                cv2.circle(rectL, (int(cx_L), int(cy_L)), 6, (0, 255, 255), 2)
-
-            if cx_R is not None:
-                cv2.circle(rectR, (int(cx_R), int(cy_R)), 6, (0, 255, 255), 2)
-
-            if X_center is not None:
-                cv2.putText(rectL, f"X_center={X_center:.2f}cm  Z={dist_cm:.1f}cm  disp={disp:.1f}px",
-                            (10, FRAME_H - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-            cv2.imshow("Left (rectified)", rectL)
-            cv2.imshow("Right (rectified)", rectR)
-
-            if (cv2.waitKey(1) & 0xFF) == ord("q"):
-                break
+        # wyjście klawiszem tylko w GUI, więc tu CTRL+C
 
     capL.release()
     capR.release()

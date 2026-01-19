@@ -8,9 +8,9 @@ CFG = json.load(open("camera_config.json", "r", encoding="utf-8"))
 W = CFG.get("frame_w", 640)
 H = CFG.get("frame_h", 480)
 
-CHESSBOARD_SIZE = (8, 5)     # <-- DOPASUJ (wewn. narożniki)
-SQUARE_SIZE_CM = 3         # <-- DOPASUJ (w cm)
-BASELINE_CM = 9.5            # u Ciebie
+CHESSBOARD_SIZE = (8, 5)    
+SQUARE_SIZE_CM = 3         
+BASELINE_CM = 9.5           
 
 IMG_DIR = "calib_images"
 OUT_XML = "stereoMap.xml"
@@ -89,7 +89,6 @@ retS, CM1, DC1, CM2, DC2, R, T, E, F = cv2.stereoCalibrate(
 R1, R2, P1, P2, Q, roi1, roi2 = cv2.stereoRectify(
     CM1, DC1, CM2, DC2, (W, H), R, T, alpha=0
 )
-
 # 4) Mapy rektyfikacji
 stereoMapL = cv2.initUndistortRectifyMap(CM1, DC1, R1, P1, (W, H), cv2.CV_16SC2)
 stereoMapR = cv2.initUndistortRectifyMap(CM2, DC2, R2, P2, (W, H), cv2.CV_16SC2)
