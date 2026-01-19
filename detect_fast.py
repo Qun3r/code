@@ -11,7 +11,7 @@ import serial
 # FAST / DEBUG ustawienia
 # =========================
 GUI_ENABLED = False
-TERMINAL_OUTPUT = True
+TERMINAL_OUTPUT = False
 UART_ENABLED = True
 
 # Największy zysk FPS:
@@ -313,7 +313,9 @@ def main():
         if cmd != last_cmd:
             send_uart(cmd, ser)
             last_cmd = cmd
-
+            if TERMINAL_OUTPUT:
+                print(f"KOMENDY: {last_cmd} -> {cmd}")
+            last_cmd = cmd
         # ======= GUI =======
         if GUI_ENABLED:
             # overlay
@@ -348,7 +350,8 @@ def main():
                 fps = fps_cnt / dt
             fps_cnt = 0
             t_fps = now
-
+            if TERMINAL_OUTPUT:
+                print(f"CMD: {cmd:12s} | Z: {dist_cm:.1f} cm")
         frame_id += 1
 
     capL.release()

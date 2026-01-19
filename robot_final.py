@@ -7,9 +7,9 @@ import json
 from ultralytics import YOLO
 import serial
 
-GUI_ENABLED = True
+GUI_ENABLED = False
 TERMINAL_OUTPUT = False
-UART_ENABLED = False
+UART_ENABLED = True
 
 SERIAL_PORT = "/dev/serial0"
 BAUD_RATE = 9600
